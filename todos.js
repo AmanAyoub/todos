@@ -5,12 +5,12 @@ const session = require("express-session");
 const { body, validationResult } = require("express-validator");
 const TodoList = require("./lib/todolist");
 const Todo = require("./lib/todo");
-const { sortTodoLists, sortTodos } = require("./lib/sort");
 const store = require("connect-loki");
+const SessionPersistence = require("./lib/session-persistence");
 
 const app = express();
 const host = "localhost";
-const port = 3000;
+const port = 3002;
 const LokiStore = store(session);
 
 app.set("views", "./views");
@@ -35,18 +35,24 @@ app.use(session({
 
 app.use(flash());
 
+// DELETE THIS CODE:
 // Set up persistent session data
-app.use((req, res, next) => {
-  let todoLists = [];
-  if ("todoLists" in req.session) {
-    req.session.todoLists.forEach(todoList => {
-      todoLists.push(TodoList.makeTodoList(todoList));
-    });
-  }
+// app.use((req, res, next) => {
+//   let todoLists = [];
+//   if ("todoLists" in req.session) {
+//     req.session.todoLists.forEach(todoList => {
+//       todoLists.push(TodoList.makeTodoList(todoList));
+//     });
+//   }
 
-  req.session.todoLists = todoLists;
+//   req.session.todoLists = todoLists;
+//   next();
+// });
+
+app.use((req, res, next) => {
+  res.locals.store = new SessionPersistence(req.session);
   next();
-});
+}); 
 
 // Extract session info
 app.use((req, res, next) => {
@@ -78,8 +84,19 @@ app.get("/", (req, res) => {
 
 // Render the list of todo lists
 app.get("/lists", (req, res) => {
+  let store = res.locals.store;
+  let todoLists = store.sortedTodoLists();
+
+  let todosInfo = todoLists.map(todoList => ({
+    countAllTodos: todoList.todos.length,
+    countDoneTodos: todoList.todos.filter(todo => todo.done).length,
+    isDone: store.isDoneTodoList(todoList),
+  }));
+
+
   res.render("lists", {
-    todoLists: sortTodoLists(req.session.todoLists),
+    todoLists,
+    todosInfo,
   });
 });
 
